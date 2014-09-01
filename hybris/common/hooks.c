@@ -37,15 +37,17 @@
 #include <errno.h>
 #include <dirent.h>
 #include <sys/types.h>
-#include <stdarg.h>
 
 #include <sys/ipc.h>
 #include <sys/shm.h>
 #include <fcntl.h>
-
 #include <unistd.h>
 #include <locale.h>
 #include <search.h>
+#include <sys/xattr.h>
+#include <grp.h>
+#include <netdb.h>
+#include <syslog.h>
 
 #include <hybris/properties/properties.h>
 
@@ -1250,53 +1252,54 @@ extern long my_sysconf(int name);
 
 FP_ATTRIB static double my_strtod(const char *nptr, char **endptr)
 {
-	if (locale_inited == 0)
-	{
-		hybris_locale = newlocale(LC_ALL_MASK, "C", 0);
-		locale_inited = 1;
-	}
-	return strtod_l(nptr, endptr, hybris_locale);
+        if (locale_inited == 0)
+        {
+                hybris_locale = newlocale(LC_ALL_MASK, "C", 0);
+                locale_inited = 1;
+        }
+        return strtod_l(nptr, endptr, hybris_locale);
 }
 
 struct open_redirect {
-	const char *from;
-	const char *to;
+        const char *from;
+        const char *to;
 };
 
 struct open_redirect open_redirects[] = {
-	{ "/dev/log/main", "/dev/log_main" },
-	{ "/dev/log/radio", "/dev/log_radio" },
-	{ "/dev/log/system", "/dev/log_system" },
-	{ "/dev/log/events", "/dev/log_events" },
-	{ NULL, NULL }
+        { "/dev/log/main", "/dev/log_main" },
+        { "/dev/log/radio", "/dev/log_radio" },
+        { "/dev/log/system", "/dev/log_system" },
+        { "/dev/log/events", "/dev/log_events" },
+        { NULL, NULL }
 };
 
 int my_open(const char *pathname, int flags, ...)
 {
-	va_list ap;
-	mode_t mode = 0;
-	const char *target_path = pathname;
+        va_list ap;
+        mode_t mode = 0;
+        const char *target_path = pathname;
 
-	if (pathname != NULL) {
-		struct open_redirect *entry = &open_redirects[0];
-		while (entry->from != NULL) {
-			if (strcmp(pathname, entry->from) == 0) {
-				target_path = entry->to;
-				break;
-			}
-			entry++;
-		}
-	}
+        if (pathname != NULL) {
+                struct open_redirect *entry = &open_redirects[0];
+                while (entry->from != NULL) {
+                        if (strcmp(pathname, entry->from) == 0) {
+                                target_path = entry->to;
+                                break;
+                        }
+                        entry++;
+                }
+        }
 
-	if (flags & O_CREAT) {
-		va_start(ap, flags);
-		mode = va_arg(ap, mode_t);
-		va_end(ap);
-	}
+        if (flags & O_CREAT) {
+                va_start(ap, flags);
+                mode = va_arg(ap, mode_t);
+                va_end(ap);
+        }
 
-	return open(target_path, flags, mode);
+        return open(target_path, flags, mode);
 }
 
+extern int __cxa_atexit(void (*)(void*), void*, void*);
 static char* use_from_bionic[] = {
     "setjmp",
     "longjmp",
@@ -1306,10 +1309,74 @@ static char* use_from_bionic[] = {
 static struct _hook hooks[] = {
     {"property_get", property_get },
     {"property_set", property_set },
+    {"getenv", getenv },
+    {"printf", printf },
     {"malloc", my_malloc },
+    {"free", free },
+    {"calloc", calloc },
+    {"cfree", cfree },
+    {"realloc", realloc },
+    {"memalign", memalign },
+    {"valloc", valloc },
+    {"pvalloc", pvalloc },
+    {"fread", fread },
+    {"getxattr", getxattr},
+    /* string.h */
+    {"memccpy",memccpy},
+    {"memchr",memchr},
+    {"memrchr",memrchr},
+    {"memcmp",memcmp},
     {"memcpy",my_memcpy},
+    {"memchr",memchr},
+    {"memrchr",memrchr},
+    {"memcmp",memcmp},
+    {"memcpy",my_memcpy},
+    {"memmove",memmove},
+    {"memset",memset},
+    {"memmem",memmem},
+    //  {"memswap",memswap},
+    {"index",index},
+    {"rindex",rindex},
+    {"strchr",strchr},
+    {"strrchr",strrchr},
     {"strlen",my_strlen},
+    {"strcmp",strcmp},
+    {"strcpy",strcpy},
+    {"strcat",strcat},
+    {"strcasecmp",strcasecmp},
+    {"strncasecmp",strncasecmp},
+    {"strdup",strdup},
+    {"strstr",strstr},
+    {"strtok",strtok},
+    {"strtok_r",strtok_r},
+    {"strerror",strerror},
+    {"strerror_r",strerror_r},
+    {"strnlen",strnlen},
+    {"strncat",strncat},
+    {"strndup",strndup},
+    {"strncmp",strncmp},
+    {"strncpy",strncpy},
     {"strtod", my_strtod},
+    {"strcspn",strcspn},
+    {"strpbrk",strpbrk},
+    {"strsep",strsep},
+    {"strspn",strspn},
+    {"strsignal",strsignal},
+    {"getgrnam", getgrnam},
+    {"strcoll",strcoll},
+    {"strxfrm",strxfrm},
+    /* strings.h */
+    {"bcmp",bcmp},
+    {"bcopy",bcopy},
+    {"bzero",bzero},
+    {"ffs",ffs},
+    {"index",index},
+    {"rindex",rindex},
+    {"strcasecmp",strcasecmp},
+    {"strncasecmp",strncasecmp},
+    /* dirent.h */
+    {"opendir", opendir},
+    {"closedir", closedir},
     /* pthread.h */
     {"pthread_atfork", pthread_atfork},
     {"pthread_create", my_pthread_create},
@@ -1387,6 +1454,16 @@ static struct _hook hooks[] = {
     /* stdio.h */
     {"__isthreaded", &__my_isthreaded},
     {"__sF", &my_sF},
+    {"fopen", fopen},
+    {"fdopen", fdopen},
+    {"popen", popen},
+    {"puts", puts},
+    {"sprintf", sprintf},
+    {"asprintf", asprintf},
+    {"vasprintf", vasprintf},
+    {"snprintf", snprintf},
+    {"vsprintf", vsprintf},
+    {"vsnprintf", vsnprintf},
     {"clearerr", my_clearerr},
     {"fclose", my_fclose},
     {"feof", my_feof},
@@ -1433,6 +1510,33 @@ static struct _hook hooks[] = {
     {"__errno", __errno_location},
     {"__set_errno", my_set_errno},
     {"sysconf", my_sysconf},
+    {"getaddrinfo", getaddrinfo},
+    {"gethostbyaddr", gethostbyaddr},
+    {"gethostbyname", gethostbyname},
+    {"gethostbyname2", gethostbyname2},
+    {"gethostent", gethostent},
+    {"strftime", strftime},
+    {"sysconf", my_sysconf},
+    {"sscanf", sscanf},
+    {"scanf", scanf},
+    {"vscanf", vscanf},
+    {"vsscanf", vsscanf},
+    {"openlog", openlog},
+    {"syslog", syslog},
+    {"closelog", closelog},
+    {"vsyslog", vsyslog},
+    {"timer_create", timer_create},
+    {"timer_settime", timer_settime},
+    {"timer_gettime", timer_gettime},
+    {"timer_delete", timer_delete},
+    {"timer_getoverrun", timer_getoverrun},
+    {"abort", abort},
+    {"writev", writev},
+    /* unistd.h */
+    {"access", access},
+    /* grp.h */
+    {"getgrgid", getgrgid},
+    {"__cxa_atexit", __cxa_atexit},
     {"dlopen", android_dlopen},
     {"dlerror", android_dlerror},
     {"dlsym", android_dlsym},
@@ -1533,6 +1637,7 @@ void hooks_install()
 char *hybris_missing_symbols[2048];
 pthread_mutex_t hook_mutex;
 
+#if 0
 void *get_hooked_symbol(char *sym)
 {
     pthread_mutex_lock(&hook_mutex);
@@ -1588,6 +1693,35 @@ void *get_hooked_symbol(char *sym)
     pthread_mutex_unlock(&hook_mutex);
 
     return rv;
+}
+#endif
+
+void *get_hooked_symbol(char *sym)
+{
+    struct _hook *ptr = &hooks[0];
+    static int counter = -1;
+
+    while (ptr->name != NULL)
+    {
+        if (strcmp(sym, ptr->name) == 0){
+            LOGD("from_hook:%s", sym);
+            return ptr->func;
+        }
+        ptr++;
+    }
+    if (strstr(sym, "pthread") != NULL)
+    {
+        /* safe */
+        if (strcmp(sym, "pthread_sigmask") == 0)
+           return NULL;
+        /* not safe */
+        counter--;
+        LOGD("%s %i\n", sym, counter);
+        return (void *) counter;
+    }
+
+    LOGD("UNABLE TO FIND:%s",sym);
+    return NULL;
 }
 
 void android_linker_init()
