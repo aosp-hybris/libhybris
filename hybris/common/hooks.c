@@ -1699,6 +1699,9 @@ void *get_hooked_symbol(char *sym)
     struct _hook *ptr = &hooks[0];
     static int counter = -1;
 
+    if (get_hooked_symbol__(sym))
+        return get_hooked_symbol__(sym);
+
     while (ptr->name != NULL)
     {
         if (strcmp(sym, ptr->name) == 0){
@@ -1719,8 +1722,8 @@ void *get_hooked_symbol(char *sym)
     }
 
     LOGD("UNABLE TO FIND:%s",sym);
-//    return NULL;
-    return get_hooked_symbol__(sym);
+    return NULL;
+
 }
 
 void android_linker_init()
