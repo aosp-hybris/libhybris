@@ -1637,7 +1637,6 @@ void hooks_install()
 char *hybris_missing_symbols[2048];
 pthread_mutex_t hook_mutex;
 
-#if 0
 void *get_hooked_symbol(char *sym)
 {
     pthread_mutex_lock(&hook_mutex);
@@ -1694,8 +1693,8 @@ void *get_hooked_symbol(char *sym)
 
     return rv;
 }
-#endif
 
+#if 0
 void *get_hooked_symbol(char *sym)
 {
     struct _hook *ptr = &hooks[0];
@@ -1723,6 +1722,7 @@ void *get_hooked_symbol(char *sym)
     LOGD("UNABLE TO FIND:%s",sym);
     return NULL;
 }
+#endif
 
 void android_linker_init()
 {
