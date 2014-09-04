@@ -1720,7 +1720,7 @@ void *get_hooked_symbol(char *sym)
 
     LOGD("UNABLE TO FIND:%s",sym);
 //    return NULL;
-    return get_hook_symbol__(sym);
+    return get_hooked_symbol__(sym);
 }
 
 void android_linker_init()
